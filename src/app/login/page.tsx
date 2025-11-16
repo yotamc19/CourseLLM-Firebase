@@ -1,60 +1,61 @@
-"use client";
+"use client"
 
-import React from "react";
-import { useAuth } from "@/components/AuthProviderClient";
-import { useRouter } from "next/navigation";
+import React from "react"
+import { useRouter } from "next/navigation"
+import { useAuth } from "@/components/AuthProviderClient"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { LogIn, Github } from "lucide-react"
 
-function LoginContent() {
-  const { signInWithGoogle, signInWithGithub, loading, firebaseUser } = useAuth();
-  const { refreshProfile, onboardingRequired, profile } = useAuth();
-  const router = useRouter();
+export default function LoginPage() {
+  const { signInWithGoogle, signInWithGithub, loading, firebaseUser, refreshProfile } = useAuth()
+  const router = useRouter()
+
+  const gotoAfterAuth = async () => {
+    const p = await refreshProfile()
+    if (!p) return router.replace("/onboarding")
+    return router.replace(p.role === "teacher" ? "/teacher" : "/student")
+  }
 
   const handleGoogle = async () => {
     try {
-      await signInWithGoogle();
-      // refresh profile and navigate based on returned profile
-      const p = await refreshProfile();
-      console.log(p);
-      if (!p) {
-        router.replace('/onboarding');
-      } else if (p.role) {
-        router.replace(p.role === 'teacher' ? '/teacher' : '/student');
-      }
+      await signInWithGoogle()
+      await gotoAfterAuth()
     } catch (err) {
-      console.error(err);
+      console.error(err)
     }
-  };
+  }
 
   const handleGithub = async () => {
     try {
-      await signInWithGithub();
-      const p = await refreshProfile();
-      if (!p) {
-        router.replace('/onboarding');
-      } else if (p.role) {
-        router.replace(p.role === 'teacher' ? '/teacher' : '/student');
-      }
+      await signInWithGithub()
+      await gotoAfterAuth()
     } catch (err) {
-      console.error(err);
+      console.error(err)
     }
-  };
+  }
 
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold mb-4">Sign in</h1>
-      <div className="space-y-2">
-        <button className="btn" onClick={handleGoogle} disabled={loading}>
-          Sign in with Google
-        </button>
-        <button className="btn" onClick={handleGithub} disabled={loading}>
-          Sign in with GitHub
-        </button>
-      </div>
-      {firebaseUser && <p className="mt-4">Signed in as {firebaseUser.email}</p>}
+    <div className="max-w-xl mx-auto py-12 px-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Sign in to CourseLLM</CardTitle>
+          <CardDescription>Use Google or GitHub to continue — we'll only store the info needed for your profile.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col space-y-3">
+            <Button onClick={handleGoogle} disabled={loading} size="lg">
+              <LogIn className="mr-2" /> Sign in with Google
+            </Button>
+            <Button variant="outline" onClick={handleGithub} disabled={loading} size="lg">
+              <Github className="mr-2" /> Sign in with GitHub
+            </Button>
+            {firebaseUser && (
+              <div className="text-sm text-muted-foreground">Signed in as {firebaseUser.email}</div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
     </div>
-  );
-}
-
-export default function LoginPage() {
-  return <LoginContent />;
+  )
 }
