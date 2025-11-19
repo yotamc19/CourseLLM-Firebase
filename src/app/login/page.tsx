@@ -49,8 +49,9 @@ export default function LoginPage() {
   // Note: GitHub sign-in removed — only Google sign-in is supported.
 
   return (
-    <div className="max-w-xl mx-auto py-12 px-4">
-      <Card>
+    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+      <div className="w-full max-w-xl">
+        <Card>
         <CardHeader>
           <CardTitle>Sign in to CourseLLM</CardTitle>
           <CardDescription>Sign in with Google to continue — we'll only store the info needed for your profile.</CardDescription>
@@ -65,8 +66,9 @@ export default function LoginPage() {
             )}
           </div>
         </CardContent>
-      </Card>
-        {navigating && (
+        </Card>
+      </div>
+      {navigating && (
           <div className="fixed inset-0 z-50 bg-background/75 flex items-center justify-center">
             <div className="w-full max-w-sm px-6">
               <div className="rounded-lg bg-card p-6 shadow-lg text-center">
