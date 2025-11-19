@@ -1,15 +1,17 @@
 "use client"
 
-import React from "react"
+import React, { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/AuthProviderClient"
 import { auth } from "@/lib/firebase"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { LogIn, Github } from "lucide-react"
+import { Loader2 } from "lucide-react"
 
 export default function LoginPage() {
   const { signInWithGoogle, signInWithGithub, loading, firebaseUser, refreshProfile, profile } = useAuth()
+  const [navigating, setNavigating] = useState(false)
   const router = useRouter()
 
   const gotoAfterAuth = async () => {
@@ -31,6 +33,7 @@ export default function LoginPage() {
 
   const handleGoogle = async () => {
     try {
+      setNavigating(true)
       await signInWithGoogle()
       // If this is the user's first sign-in, send them to onboarding immediately.
       const user = auth.currentUser
@@ -39,12 +42,14 @@ export default function LoginPage() {
 
       await gotoAfterAuth()
     } catch (err) {
+      setNavigating(false)
       console.error(err)
     }
   }
 
   const handleGithub = async () => {
     try {
+      setNavigating(true)
       await signInWithGithub()
       const user = auth.currentUser
       const isNew = !!(user && user.metadata && user.metadata.creationTime === user.metadata.lastSignInTime)
@@ -52,6 +57,7 @@ export default function LoginPage() {
 
       await gotoAfterAuth()
     } catch (err) {
+      setNavigating(false)
       console.error(err)
     }
   }
@@ -77,6 +83,17 @@ export default function LoginPage() {
           </div>
         </CardContent>
       </Card>
+        {navigating && (
+          <div className="fixed inset-0 z-50 bg-background/75 flex items-center justify-center">
+            <div className="w-full max-w-sm px-6">
+              <div className="rounded-lg bg-card p-6 shadow-lg text-center">
+                <Loader2 className="mx-auto mb-4 animate-spin" />
+                <div className="text-lg font-medium">Signing you in…</div>
+                <div className="text-sm text-muted-foreground mt-1">We&apos;re taking you to your dashboard.</div>
+              </div>
+            </div>
+          </div>
+        )}
     </div>
   )
 }
