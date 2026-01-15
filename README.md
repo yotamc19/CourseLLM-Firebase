@@ -158,7 +158,82 @@ Python dependencies are defined in `requirements.txt`:
 
 ---
 
-## 7. DSPy Backend API (overview)
+## 7. Production Environment
+
+For production deployment, create a `.env` file (not `.env.local`) with production Firebase values:
+
+```bash
+# Firebase Production Config
+NEXT_PUBLIC_FIREBASE_API_KEY=your-production-api-key
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your-sender-id
+NEXT_PUBLIC_FIREBASE_APP_ID=your-app-id
+
+# Google AI (Genkit)
+GOOGLE_API_KEY=your-google-api-key
+
+# Do NOT set emulator host variables in production
+```
+
+**Note:** Do not include `FIREBASE_AUTH_EMULATOR_HOST`, `FIRESTORE_EMULATOR_HOST`, or `FIREBASE_STORAGE_EMULATOR_HOST` in production - these should only be set for local development.
+
+---
+
+## 8. DataConnect (PostgreSQL)
+
+This project uses Firebase DataConnect with Cloud SQL (PostgreSQL).
+
+### Schema
+
+Located in `dataconnect/schema/schema.gql`:
+
+```graphql
+enum DocumentStatus {
+  UPLOADING, UPLOADED, CONVERTING, CONVERTED,
+  CHUNKING, CHUNKED, ANALYZING, ANALYZED, ERROR
+}
+
+type User @table {
+  id: String! @default(expr: "uuidV4()")
+  username: String
+}
+
+type Course @table {
+  id: String!
+  title: String!
+  description: String
+}
+
+type SourceDocument @table {
+  id: String! @default(expr: "uuidV4()")
+  course: Course!
+  fileName: String!
+  mimeType: String!
+  size: Int
+  storagePath: String!
+  status: DocumentStatus!
+  updatedAt: Timestamp @default(expr: "request.time")
+}
+```
+
+### Connector
+
+Located in `dataconnect/example/`:
+- `connector.yaml` - Configuration for SDK generation
+- `queries.gql` - GraphQL queries (ListUsers, GetUser, ListCourses, GetCourse, ListSourceDocuments, etc.)
+- `mutations.gql` - GraphQL mutations for CRUD operations
+
+### Generated SDKs
+
+After running `npm install` (which triggers `npm run dataconnect:generate`):
+- `src/dataconnect-generated/` - JavaScript SDK with React bindings
+- `src/dataconnect-admin-generated/` - Admin Node SDK for server-side operations
+
+---
+
+## 9. DSPy Backend API (overview)
 
 The Python backend exposes a small HTTP API (FastAPI) on `http://127.0.0.1:8001`.  
 The Next.js app calls these endpoints via server actions in  
@@ -166,7 +241,7 @@ The Next.js app calls these endpoints via server actions in
 
 All endpoints are **POST** and use JSON.
 
-### 7.1 `POST /answer`
+### 9.1 `POST /answer`
 
 - **Purpose:** Answer a student’s question about a course.
 - **Request body (simplified):**
@@ -177,7 +252,7 @@ All endpoints are **POST** and use JSON.
   - `answer`: string
   - optional: `reasoning`, `sources`
 
-### 7.2 `POST /assess`
+### 9.2 `POST /assess`
 
 - **Purpose:** Assess a student’s free-text answer.
 - **Request body (simplified):**
@@ -188,7 +263,7 @@ All endpoints are **POST** and use JSON.
   - `score`: number (e.g., 0–100 or 0–1)
   - `feedback`: string
 
-### 7.3 `POST /summarize`
+### 9.3 `POST /summarize`
 
 - **Purpose:** Summarize course content or a given text.
 - **Request body (simplified):**
@@ -197,7 +272,7 @@ All endpoints are **POST** and use JSON.
 - **Response (simplified):**
   - `summary`: string
 
-### 7.4 `POST /quiz`
+### 9.4 `POST /quiz`
 
 - **Purpose:** Generate quiz questions for a course.
 - **Request body (simplified):**

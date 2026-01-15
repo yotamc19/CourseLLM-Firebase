@@ -81,9 +81,6 @@ firestore-debug.log
 .gemini/
 .github/
 .venv/
-.clinerules/
-openspec/
-AGENTS.md
 GEMINI.md
 
 
