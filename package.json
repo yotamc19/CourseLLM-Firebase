@@ -4,14 +4,23 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack -p 9002",
+    "test:e2e": "playwright test",
+    "test:dataconnect": "playwright test --config=tests/playwright.config.ts dataconnect.spec.ts",
+    "test:storage": "playwright test --config=tests/playwright.config.ts storage.spec.ts",
+    "test:functions": "playwright test --config=tests/playwright.config.ts functions-trigger.spec.ts",
     "genkit:dev": "genkit start -- tsx src/ai/dev.ts",
     "genkit:watch": "genkit start -- tsx --watch src/ai/dev.ts",
-    "build": "NODE_ENV=production next build",
+    "dspy:dev": "python -m uvicorn src.ai.dspy.api:app --reload --port 8001",
+    "dataconnect:generate": "firebase dataconnect:sdk:generate",
+    "postinstall": "npm run dataconnect:generate || true",
+    "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@dataconnect/admin-generated": "file:src/dataconnect-admin-generated",
+    "@dataconnect/generated": "file:src/dataconnect-generated",
     "@genkit-ai/google-genai": "^1.20.0",
     "@genkit-ai/next": "^1.20.0",
     "@hookform/resolvers": "^4.1.3",
@@ -42,6 +51,7 @@
     "dotenv": "^16.5.0",
     "embla-carousel-react": "^8.6.0",
     "firebase": "^11.9.1",
+    "firebase-admin": "^13.6.0",
     "genkit": "^1.20.0",
     "lucide-react": "^0.475.0",
     "next": "15.3.3",
@@ -56,6 +66,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.40.0",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",

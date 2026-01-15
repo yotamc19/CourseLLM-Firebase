@@ -1,0 +1,9 @@
+mutation @transaction {
+  user_insertMany(
+    data: [
+      { username: "sherlock_h" },
+      { username: "hercule_p" },
+      { username: "jane_d" }
+    ]
+  )
+}

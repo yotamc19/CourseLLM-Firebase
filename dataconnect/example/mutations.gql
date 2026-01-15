@@ -1,0 +1,59 @@
+# User Mutations
+mutation InsertUser($username: String) @auth(level: PUBLIC) {
+  user_insert(data: {username: $username})
+}
+
+mutation UpdateUser($id: String!, $username: String) @auth(level: PUBLIC) {
+  user_update(key: {id: $id}, data: {username: $username})
+}
+
+mutation DeleteUser($id: String!) @auth(level: PUBLIC) {
+  user_delete(key: {id: $id})
+}
+
+# Course Mutations
+mutation InsertCourse($id: String!, $title: String!, $description: String) @auth(level: PUBLIC) {
+  course_insert(data: {id: $id, title: $title, description: $description})
+}
+
+mutation UpdateCourse($id: String!, $title: String, $description: String) @auth(level: PUBLIC) {
+  course_update(key: {id: $id}, data: {title: $title, description: $description})
+}
+
+mutation UpsertCourse($id: String!, $title: String!, $description: String) @auth(level: PUBLIC) {
+  course_upsert(data: {id: $id, title: $title, description: $description})
+}
+
+mutation DeleteCourse($id: String!) @auth(level: PUBLIC) {
+  course_delete(key: {id: $id})
+}
+
+# SourceDocument Mutations
+mutation CreateSourceDocument($courseId: String!, $fileName: String!, $mimeType: String!, $size: Int, $storagePath: String!) @auth(level: PUBLIC) {
+  sourceDocument_insert(data: {
+    course: {id: $courseId},
+    fileName: $fileName,
+    mimeType: $mimeType,
+    size: $size,
+    storagePath: $storagePath,
+    status: UPLOADING
+  })
+}
+
+mutation UpdateSourceDocument($id: String!, $fileName: String, $mimeType: String, $size: Int, $storagePath: String, $status: DocumentStatus) @auth(level: PUBLIC) {
+  sourceDocument_update(key: {id: $id}, data: {
+    fileName: $fileName,
+    mimeType: $mimeType,
+    size: $size,
+    storagePath: $storagePath,
+    status: $status
+  })
+}
+
+mutation UpdateDocumentStatus($id: String!, $status: DocumentStatus!, $storagePath: String) @auth(level: PUBLIC) {
+  sourceDocument_update(key: {id: $id}, data: {status: $status, storagePath: $storagePath})
+}
+
+mutation DeleteSourceDocument($id: String!) @auth(level: PUBLIC) {
+  sourceDocument_delete(key: {id: $id})
+}

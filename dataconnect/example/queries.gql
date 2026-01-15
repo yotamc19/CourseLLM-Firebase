@@ -1,0 +1,84 @@
+# User Queries
+query ListUsers @auth(level: PUBLIC) {
+  users {
+    id
+    username
+  }
+}
+
+query GetUser($id: String!) @auth(level: PUBLIC) {
+  user(key: {id: $id}) {
+    id
+    username
+  }
+}
+
+# Course Queries
+query ListCourses @auth(level: PUBLIC) {
+  courses {
+    id
+    title
+    description
+  }
+}
+
+query GetCourse($id: String!) @auth(level: PUBLIC) {
+  course(key: {id: $id}) {
+    id
+    title
+    description
+  }
+}
+
+# SourceDocument Queries
+query ListSourceDocuments @auth(level: PUBLIC) {
+  sourceDocuments {
+    id
+    fileName
+    mimeType
+    size
+    status
+    storagePath
+    updatedAt
+    course {
+      id
+      title
+    }
+  }
+}
+
+query ListCourseDocuments($courseId: String!) @auth(level: PUBLIC) {
+  sourceDocuments(where: {course: {id: {eq: $courseId}}}) {
+    id
+    fileName
+    mimeType
+    size
+    status
+    storagePath
+    updatedAt
+  }
+}
+
+query GetSourceDocument($id: String!) @auth(level: PUBLIC) {
+  sourceDocument(key: {id: $id}) {
+    id
+    fileName
+    mimeType
+    size
+    status
+    storagePath
+    updatedAt
+    course {
+      id
+      title
+      description
+    }
+  }
+}
+
+query GetSourceDocumentByStoragePath($storagePath: String!) @auth(level: PUBLIC) {
+  sourceDocuments(where: {storagePath: {eq: $storagePath}}) {
+    id
+    status
+  }
+}

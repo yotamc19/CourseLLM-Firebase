@@ -13,8 +13,8 @@ export const courses: Course[] = [
     description: 'Learn the fundamentals of Python programming. No prior experience needed.',
     imageId: 'course-1',
     materials: [
-      { id: 'mat-1', title: 'Week 1: Introduction', type: 'PDF', content: 'This is the content for the week 1 PDF. It covers basic syntax, variables, and data types in Python. We will learn how to write our first "Hello, World!" program.' },
-      { id: 'mat-2', title: 'Week 2: Control Flow', type: 'PPT', content: 'This presentation covers control flow using if-else statements and loops (for and while). Includes examples and exercises on conditional logic.' },
+      { id: 'mat-1', title: 'Week 1: Introduction', type: 'PDF', content: 'This is the content for the week 1 PDF. It covers basic syntax, variables, and data types in Python. We will learn how to write our first "Hello, World!" program.', status: 'ANALYZED' },
+      { id: 'mat-2', title: 'Week 2: Control Flow', type: 'PPT', content: 'This presentation covers control flow using if-else statements and loops (for and while). Includes examples and exercises on conditional logic.', status: 'ANALYZED' },
     ],
     learningObjectives: '1. Understand basic Python syntax. 2. Use variables and data types. 3. Implement control flow structures.',
     learningSkills: 'Problem-solving, Algorithmic thinking',
@@ -26,8 +26,8 @@ export const courses: Course[] = [
     description: 'A deep dive into common data structures and algorithms.',
     imageId: 'course-6',
     materials: [
-      { id: 'mat-3', title: 'Module 1: Arrays & Strings', type: 'MD', content: 'Markdown content for Arrays and Strings. Covers operations, complexity analysis, and common problems.' },
-      { id: 'mat-4', title: 'Module 2: Linked Lists', type: 'DOC', content: 'A document about singly and doubly linked lists. Includes implementation details and traversal techniques.' },
+      { id: 'mat-3', title: 'Module 1: Arrays & Strings', type: 'MD', content: 'Markdown content for Arrays and Strings. Covers operations, complexity analysis, and common problems.', status: 'ANALYZED' },
+      { id: 'mat-4', title: 'Module 2: Linked Lists', type: 'DOC', content: 'A document about singly and doubly linked lists. Includes implementation details and traversal techniques.', status: 'ANALYZED' },
     ],
     learningObjectives: '1. Implement various data structures. 2. Analyze algorithm complexity. 3. Solve problems using appropriate data structures.',
     learningSkills: 'Analytical skills, Efficiency analysis',
@@ -39,8 +39,8 @@ export const courses: Course[] = [
     description: 'Explore the core concepts of machine learning and neural networks.',
     imageId: 'course-4',
     materials: [
-        { id: 'mat-5', title: 'Concept: Supervised Learning', type: 'PDF', content: 'A PDF explaining supervised learning, including regression and classification models.' },
-        { id: 'mat-6', title: 'Concept: Neural Networks', type: 'PPT', content: 'Presentation on the basics of neural networks, neurons, and activation functions.' },
+        { id: 'mat-5', title: 'Concept: Supervised Learning', type: 'PDF', content: 'A PDF explaining supervised learning, including regression and classification models.', status: 'ANALYZED' },
+        { id: 'mat-6', title: 'Concept: Neural Networks', type: 'PPT', content: 'Presentation on the basics of neural networks, neurons, and activation functions.', status: 'ANALYZED' },
     ],
     learningObjectives: '1. Understand ML concepts. 2. Build simple ML models. 3. Differentiate between supervised and unsupervised learning.',
     learningSkills: 'Statistical analysis, Model building',

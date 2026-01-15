@@ -1,0 +1,183 @@
+import { test, expect } from '@playwright/test';
+import { initializeApp, getApps } from 'firebase/app';
+import { getAuth, connectAuthEmulator, signInWithCustomToken } from 'firebase/auth';
+import { getStorage, connectStorageEmulator, ref, uploadBytes, deleteObject } from 'firebase/storage';
+import * as admin from 'firebase-admin';
+import * as http from 'http';
+import { time } from 'console';
+
+const firebaseConfig = {
+  apiKey: "test-api-key",
+  projectId: "se-with-llms",
+  appId: "test-app-id",
+  storageBucket: "se-with-llms.firebasestorage.app",
+};
+
+test.describe('Firebase Functions Triggers', () => {
+  let app: any;
+  let storage: any;
+  let auth: any;
+  let server: http.Server;
+
+  test.beforeAll(async () => {
+    // Set emulator hosts
+    process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
+    process.env.FIREBASE_STORAGE_EMULATOR_HOST = '127.0.0.1:9199';
+
+    // Initialize Client App
+    if (getApps().length === 0) {
+      app = initializeApp(firebaseConfig);
+    } else {
+      app = getApps()[0];
+    }
+
+    storage = getStorage(app);
+    auth = getAuth(app);
+
+    // Connect Client SDK to emulators
+    try {
+        connectStorageEmulator(storage, '127.0.0.1', 9199);
+        connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+    } catch (e: any) {
+        if (!e.message?.includes('already been initialized')) {
+            console.warn('Emulator connection warning:', e.message);
+        }
+    }
+
+    // Initialize Admin SDK
+    if (admin.apps.length === 0) {
+      admin.initializeApp({
+        projectId: firebaseConfig.projectId
+      });
+    }
+  });
+
+  test.afterEach(async () => {
+      if (server) {
+          server.close();
+      }
+  });
+
+  async function signInAsTeacher() {
+    const uid = `test-teacher-${Date.now()}`;
+    const token = await admin.auth().createCustomToken(uid, { role: 'teacher' });
+    await signInWithCustomToken(auth, token);
+    return uid;
+  }
+
+  async function createTestFileBlob(content: string = 'Test content') {
+    const bytes = new TextEncoder().encode(content);
+    return new Blob([bytes], { type: 'text/plain' });
+  }
+
+  test('onFileUpload should send POST request to conversion service', async () => {
+    test.setTimeout(30000); // Increase timeout for function trigger
+
+    // 1. Start Mock Server
+    let requestReceivedPromiseResolve: (value: any) => void;
+    const requestReceivedPromise = new Promise<any>((resolve) => {
+        requestReceivedPromiseResolve = resolve;
+    });
+
+    server = http.createServer((req, res) => {
+        let body = '';
+        req.on('data', chunk => {
+            body += chunk.toString();
+        });
+        req.on('end', () => {
+            if (req.method === 'POST' && req.url === '/convert') {
+                console.log('Mock server received /convert request');
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ id: 'job-mock-1', status: 'queued' }));
+                requestReceivedPromiseResolve(JSON.parse(body));
+            } else {
+                res.writeHead(404);
+                res.end();
+            }
+        });
+    });
+
+    await new Promise<void>((resolve) => server.listen(8000, resolve));
+    console.log('Mock server listening on port 8000');
+
+    // 2. Upload File
+    await signInAsTeacher();
+    const courseId = `course-auto-${Date.now()}`;
+    const fileName = 'lecture.pdf';
+    // Path must match regex: ^courses\/([^\/]+)\/materials\/([^\/]+)\.([a-zA-Z0-9]+)$
+    const storageRef = ref(storage, `courses/${courseId}/materials/${fileName}`);
+    const blob = await createTestFileBlob('Mock PDF Content');
+
+    await uploadBytes(storageRef, blob);
+    console.log(`Uploaded file to ${storageRef.fullPath}`);
+
+    try {
+        // 3. Wait for Trigger
+        console.log('Waiting for webhook...');
+        // Add a timeout to fail faster if function doesn't fire
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout waiting for webhook')), 15000));
+        
+        const requestBody = await Promise.race([requestReceivedPromise, timeoutPromise]);
+
+        // 4. Validate
+        console.log('Webhook received:', requestBody);
+        
+        expect(requestBody).toHaveProperty('source_path');
+        expect(requestBody.source_path).toContain(`courses/${courseId}/materials/${fileName}`);
+        // Check for gs:// prefix and bucket
+        expect(requestBody.source_path).toMatch(/^gs:\/\/[^\/]+\/courses\/.*$/);
+    } finally {
+        // Cleanup: Delete the uploaded file
+        await deleteObject(storageRef).catch(e => console.warn(`Cleanup: File '${fileName}' might not have existed or error during deletion: ${e.message}`));
+        console.log(`Cleanup performed for test: ${courseId}`);
+    }
+  });
+
+  test('onFileDeleted should delete corresponding .md file', async () => {
+    test.setTimeout(15000);
+
+    await signInAsTeacher();
+    const courseId = `course-del-${Date.now()}`;
+    const baseName = 'document';
+    const originalFileName = `${baseName}.pdf`;
+    const mdFileName = `${baseName}.md`;
+    
+    // Paths
+    const originalRef = ref(storage, `courses/${courseId}/materials/${originalFileName}`);
+    const mdRef = ref(storage, `courses/${courseId}/materials/${mdFileName}`);
+
+    // 1. Upload both files
+    await uploadBytes(originalRef, await createTestFileBlob('Original content'));
+    await uploadBytes(mdRef, await createTestFileBlob('Markdown content'));
+
+    // Verify both exist (sanity check)
+    // We can assume they exist if uploadBytes succeeded, but let's be sure
+    // Using admin SDK to check existence quickly without worrying about download permissions logic
+    const bucket = admin.storage().bucket(firebaseConfig.storageBucket);
+    const originalFile = bucket.file(`courses/${courseId}/materials/${originalFileName}`);
+    const mdFile = bucket.file(`courses/${courseId}/materials/${mdFileName}`);
+
+    expect((await originalFile.exists())[0]).toBe(true);
+    expect((await mdFile.exists())[0]).toBe(true);
+
+    // 2. Delete the original file
+    await deleteObject(originalRef);
+    console.log(`Deleted file: ${originalRef.fullPath}`);
+
+    // 3. Wait for the .md file to be deleted (async trigger)
+    console.log('Waiting for corresponding .md file to be deleted...');
+    
+    // Poll for deletion
+    let deleted = false;
+    for (let i = 0; i < 20; i++) { // Try for 10 seconds (20 * 500ms)
+        const [exists] = await mdFile.exists();
+        if (!exists) {
+            deleted = true;
+            break;
+        }
+        await new Promise(r => setTimeout(r, 500));
+    }
+
+    expect(deleted).toBe(true);
+  });
+});

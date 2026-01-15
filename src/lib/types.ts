@@ -3,6 +3,8 @@ export type Material = {
   title: string;
   type: 'PDF' | 'PPT' | 'DOC' | 'MD';
   content: string;
+  storagePath?: string;
+  status?: 'UPLOADING' | 'UPLOADED' | 'CONVERTING' | 'CONVERTED' | 'CHUNKING' | 'CHUNKED' | 'ANALYZING' | 'ANALYZED' | 'ERROR';
 };
 
 export type Course = {

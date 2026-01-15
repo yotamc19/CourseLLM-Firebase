@@ -1,0 +1,36 @@
+
+# CourseLLM Schema
+
+enum DocumentStatus {
+  UPLOADING
+  UPLOADED
+  CONVERTING
+  CONVERTED
+  CHUNKING
+  CHUNKED
+  ANALYZING
+  ANALYZED
+  ERROR
+}
+
+type User @table {
+  id: String! @default(expr: "uuidV4()")
+  username: String
+}
+
+type Course @table {
+  id: String!
+  title: String!
+  description: String
+}
+
+type SourceDocument @table {
+  id: String! @default(expr: "uuidV4()")
+  course: Course!
+  fileName: String!
+  mimeType: String!
+  size: Int
+  storagePath: String! # Path in Cloud Storage
+  status: DocumentStatus!
+  updatedAt: Timestamp @default(expr: "request.time")
+}
