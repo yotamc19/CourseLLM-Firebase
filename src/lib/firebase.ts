@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, connectAuthEmulator } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, connectAuthEmulator, signInWithCustomToken } from "firebase/auth";
 import { getFirestore, enableIndexedDbPersistence, connectFirestoreEmulator } from "firebase/firestore";
 import { getStorage, connectStorageEmulator } from "firebase/storage";
 import { getDataConnect, connectDataConnectEmulator } from "firebase/data-connect";
@@ -18,14 +18,20 @@ function getFirebaseConfig() {
     }
   }
 
+  // In development mode with emulators, use demo-project to match emulator settings
+  // This ensures Admin SDK and client SDK use the same project ID
+  const isDevelopment = process.env.NODE_ENV === "development";
+  const projectId = isDevelopment ? "demo-project" : process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+  const storageBucket = isDevelopment ? "demo-project.firebasestorage.app" : process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
+
   // Fall back to individual env vars (for local dev with .env.local)
   return {
-    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "demo-api-key",
     authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+    projectId,
+    storageBucket,
     messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "demo-app-id",
   };
 }
 
@@ -66,9 +72,10 @@ try {
 
 export const googleProvider = new GoogleAuthProvider();
 
-// Expose auth on window for E2E testing (allows forcing token refresh)
+// Expose auth on window for E2E testing (allows forcing token refresh and custom token sign-in)
 if (typeof window !== 'undefined') {
   (window as any).__FIREBASE_AUTH__ = auth;
+  (window as any).__FIREBASE_SIGN_IN_WITH_CUSTOM_TOKEN__ = signInWithCustomToken;
 }
 
 export default app;

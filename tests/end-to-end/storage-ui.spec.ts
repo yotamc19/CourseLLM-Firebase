@@ -12,6 +12,12 @@
  *   npx playwright test --config=tests/playwright.config.ts storage-ui.spec.ts --headed
  */
 
+// IMPORTANT: Set emulator env vars BEFORE importing firebase-admin
+// This ensures Admin SDK connects to emulators, not production
+process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
+process.env.FIREBASE_STORAGE_EMULATOR_HOST = '127.0.0.1:9199';
+process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
+
 import { test, expect, Page } from '@playwright/test';
 import * as admin from 'firebase-admin';
 import path from 'path';
@@ -43,12 +49,7 @@ test.describe('Storage UI End-to-End Tests', () => {
   let testTeacherUid: string;
 
   test.beforeAll(async () => {
-    // Set emulator hosts
-    process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
-    process.env.FIREBASE_STORAGE_EMULATOR_HOST = '127.0.0.1:9199';
-    process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
-
-    // Initialize Admin SDK
+    // Initialize Admin SDK (env vars already set at module level)
     if (admin.apps.length === 0) {
       admin.initializeApp({
         projectId: firebaseConfig.projectId
@@ -60,132 +61,134 @@ test.describe('Storage UI End-to-End Tests', () => {
     testTeacherUid = `test-teacher-uid`; // Will be replaced after sign in
   });
 
+  // Clear browser state before each test to avoid sign-in flakiness
+  test.beforeEach(async ({ page, context }) => {
+    // Clear all cookies to ensure clean state
+    await context.clearCookies();
+
+    // Navigate and clear all storage (properly awaited)
+    await page.goto(BASE_URL);
+    await page.evaluate(async () => {
+      localStorage.clear();
+      sessionStorage.clear();
+
+      // Clear IndexedDB for Firebase Auth - must await each deletion
+      if (window.indexedDB && typeof indexedDB.databases === 'function') {
+        try {
+          const dbs = await indexedDB.databases();
+          await Promise.all(
+            dbs.map(db => {
+              return new Promise<void>((resolve, reject) => {
+                if (!db.name) {
+                  resolve();
+                  return;
+                }
+                const request = indexedDB.deleteDatabase(db.name);
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+                request.onblocked = () => {
+                  // Force close and retry
+                  console.warn(`IndexedDB ${db.name} blocked, forcing close`);
+                  resolve();
+                };
+              });
+            })
+          );
+        } catch (e) {
+          console.warn('Failed to clear IndexedDB:', e);
+        }
+      }
+    });
+
+    // Reload the page to ensure Firebase Auth picks up the cleared state
+    await page.reload();
+    await page.waitForLoadState('domcontentloaded');
+
+    // Force sign out via Firebase Auth if there's a lingering session
+    await page.evaluate(async () => {
+      // @ts-ignore
+      const firebaseAuth = window.__FIREBASE_AUTH__;
+      if (firebaseAuth && firebaseAuth.currentUser) {
+        try {
+          await firebaseAuth.signOut();
+        } catch (e) {
+          console.warn('Sign out failed:', e);
+        }
+      }
+    });
+
+  });
+
   /**
-   * Sign in using the emulator's "Add new account" flow
-   * Includes retry logic for flaky popup-based auth
+   * Sign in using custom token authentication.
+   * Uses Admin SDK (already connected to emulators) to create tokens directly.
    */
-  async function signInWithEmulator(page: Page, retryCount = 0): Promise<string> {
-    const MAX_RETRIES = 2;
+  async function signInWithEmulator(page: Page): Promise<string> {
+    const uid = `test-teacher-${Date.now()}`;
+    console.log(`Signing in with custom token for UID: ${uid}`);
 
+    // Create custom token using Admin SDK (already connected to emulators)
+    const token = await admin.auth().createCustomToken(uid, { role: 'teacher' });
+
+    // Navigate to a page where Firebase is initialized
     await page.goto(`${BASE_URL}/login`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
-    // Click "Sign in with Google" button
-    const signInButton = page.locator('button:has-text("Sign in with Google")');
-    await expect(signInButton).toBeVisible();
+    // Sign in with the custom token in the browser
+    const signInResult = await page.evaluate(async (customToken: string) => {
+      // @ts-ignore - exposed by firebase.ts for testing
+      const auth = window.__FIREBASE_AUTH__;
+      // @ts-ignore - exposed by firebase.ts for testing
+      const signInWithCustomToken = window.__FIREBASE_SIGN_IN_WITH_CUSTOM_TOKEN__;
 
-    // The emulator will show a popup - wait for it
-    const popupPromise = page.waitForEvent('popup');
-    await signInButton.click();
-
-    let popup;
-    try {
-      popup = await popupPromise;
-      await popup.waitForLoadState('domcontentloaded');
-    } catch (e) {
-      console.log('Failed to get popup, retrying...');
-      if (retryCount < MAX_RETRIES) {
-        return signInWithEmulator(page, retryCount + 1);
+      if (!auth) {
+        return { success: false, error: 'Firebase Auth not available on window' };
       }
-      throw e;
+      if (!signInWithCustomToken) {
+        return { success: false, error: 'signInWithCustomToken not available on window' };
+      }
+
+      try {
+        const credential = await signInWithCustomToken(auth, customToken);
+        return { success: true, uid: credential.user.uid };
+      } catch (e: any) {
+        return { success: false, error: e.message };
+      }
+    }, token);
+
+    if (!signInResult.success) {
+      throw new Error(`Custom token sign-in failed: ${signInResult.error}`);
     }
 
+    testTeacherUid = signInResult.uid || uid;
+    console.log(`Signed in successfully, UID: ${testTeacherUid}`);
+
+    // Set custom claims via Admin SDK
     try {
-      // In the emulator popup, click "Add new account"
-      const addAccountButton = popup.getByText('Add new account');
-      await addAccountButton.waitFor({ timeout: 10000 });
-      await addAccountButton.click();
-
-      // Auto-generate user - click the "Auto-generate user information" or just submit
-      // The emulator should have an auto-generate option or we fill in manually
-      const autoGenerateButton = popup.getByText('Auto-generate user information');
-      if (await autoGenerateButton.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await autoGenerateButton.click();
-      }
-
-      // Click "Sign in" or "Sign in with Google" in the popup
-      const signInPopupButton = popup.locator('button:has-text("Sign in")').first();
-      await signInPopupButton.waitFor({ timeout: 5000 });
-      await signInPopupButton.click();
-
-      // Wait for popup to close and redirect to happen
-      await popup.waitForEvent('close', { timeout: 10000 }).catch(() => {});
-    } catch (e) {
-      console.log('Popup interaction failed:', e);
-      // Try to close popup if still open
-      if (!popup.isClosed()) {
-        await popup.close().catch(() => {});
-      }
-      if (retryCount < MAX_RETRIES) {
-        return signInWithEmulator(page, retryCount + 1);
-      }
-      throw e;
+      await admin.auth().setCustomUserClaims(testTeacherUid, { role: 'teacher' });
+    } catch (e: any) {
+      console.log(`Could not set claims: ${e.code || e.message}`);
     }
 
-    // Wait for redirect after successful sign in - should go to /onboarding or /student or /teacher
+    // Force token refresh to pick up claims
+    await page.evaluate(async () => {
+      // @ts-ignore
+      const auth = window.__FIREBASE_AUTH__;
+      if (auth?.currentUser) {
+        await auth.currentUser.getIdToken(true);
+      }
+    });
+
+    // Reload to trigger auth state listener and redirect (use domcontentloaded instead of networkidle to avoid timeout)
+    await page.reload();
+    await page.waitForLoadState('domcontentloaded');
+
+    // Wait for redirect to onboarding/student/teacher
     try {
       await page.waitForURL(/\/(onboarding|student|teacher)/, { timeout: 10000 });
-      console.log('Sign in redirect complete:', page.url());
     } catch {
-      console.log('Sign in redirect timeout, current URL:', page.url());
-      // If still on login page, try again
-      if (page.url().includes('/login')) {
-        if (retryCount < MAX_RETRIES) {
-          console.log(`Retrying sign-in (attempt ${retryCount + 2})...`);
-          return signInWithEmulator(page, retryCount + 1);
-        }
-        // Last resort - reload and wait
-        await page.reload();
-        await page.waitForTimeout(3000);
-      }
-    }
-
-    // Get the UID directly from the browser's current user
-    try {
-      // First, get the UID from the browser
-      const browserUid = await page.evaluate(async () => {
-        // @ts-ignore - exposed by firebase.ts for testing
-        const firebaseAuth = window.__FIREBASE_AUTH__;
-        if (firebaseAuth && firebaseAuth.currentUser) {
-          return firebaseAuth.currentUser.uid;
-        }
-        return null;
-      });
-
-      if (browserUid) {
-        testTeacherUid = browserUid;
-        console.log(`Got UID from browser: ${testTeacherUid}`);
-
-        // Set custom claims for the teacher role using Admin SDK
-        await admin.auth().setCustomUserClaims(testTeacherUid, { role: 'teacher' });
-        console.log(`Set teacher role for user: ${testTeacherUid}`);
-
-        // Force token refresh in the browser
-        const refreshed = await page.evaluate(async () => {
-          // @ts-ignore - exposed by firebase.ts for testing
-          const firebaseAuth = window.__FIREBASE_AUTH__;
-          if (firebaseAuth && firebaseAuth.currentUser) {
-            try {
-              await firebaseAuth.currentUser.getIdToken(true);
-              return 'success';
-            } catch (e: any) {
-              return `error: ${e.message}`;
-            }
-          }
-          return 'no-user';
-        });
-        console.log('Token refresh result:', refreshed);
-
-        // Reload to ensure the app uses the new token with claims
-        if (refreshed === 'success') {
-          await page.reload();
-          await page.waitForTimeout(1000);
-        }
-      } else {
-        console.warn('No user found in browser after sign-in');
-      }
-    } catch (e) {
-      console.warn('Could not set custom claims:', e);
+      // If no redirect happened, that's OK - we'll handle navigation in the test
+      console.log(`No automatic redirect, current URL: ${page.url()}`);
     }
 
     return testTeacherUid;
@@ -265,28 +268,26 @@ test.describe('Storage UI End-to-End Tests', () => {
     // Wait for the Teacher button to be visible and click immediately
     const teacherButton = page.locator('button:has-text("Teacher")');
     await teacherButton.waitFor({ state: 'visible', timeout: 5000 });
-    await teacherButton.evaluate((btn) => (btn as HTMLButtonElement).click());
+    await teacherButton.click();
     console.log('Clicked Teacher button');
 
-    // Wait for UI to update - minimal delay
-    await page.waitForTimeout(100);
-
-    // Fill in Department field
-    await page.fill('input[placeholder="e.g. Computer Science"]', 'Test Department');
+    // Wait for department field to be visible (indicates UI updated after role selection)
+    const departmentInput = page.locator('input[placeholder="e.g. Computer Science"]');
+    await departmentInput.waitFor({ state: 'visible', timeout: 5000 });
+    await departmentInput.fill('Test Department');
     console.log('Filled department');
 
     // Fill in a course and click Add
-    await page.fill('input[placeholder="Add a course and press Enter"]', 'Test Course');
+    const courseInput = page.locator('input[placeholder="Add a course and press Enter"]');
+    await courseInput.fill('Test Course');
     const addButton = page.locator('button:has-text("Add")');
-    await addButton.evaluate((btn) => (btn as HTMLButtonElement).click());
+    await addButton.click();
     console.log('Added course');
 
-    // Wait a bit for course to be added - minimal delay
-    await page.waitForTimeout(100);
-
-    // Click "Save and Continue"
+    // Wait for Save and Continue button to be enabled (indicates course was added)
     const saveButton = page.locator('button:has-text("Save and Continue")');
-    await saveButton.evaluate((btn) => (btn as HTMLButtonElement).click());
+    await expect(saveButton).toBeEnabled({ timeout: 5000 });
+    await saveButton.click();
     console.log('Clicked Save and Continue');
 
     // Wait for redirect to teacher dashboard
@@ -303,11 +304,19 @@ test.describe('Storage UI End-to-End Tests', () => {
     });
 
     if (uid) {
-      // Set custom claims via Admin SDK (in case they weren't set during sign-in)
-      await admin.auth().setCustomUserClaims(uid, { role: 'teacher' });
-      console.log(`Set teacher claims for user: ${uid}`);
+      // Try to set custom claims via Admin SDK
+      // This may fail if the emulator user hasn't synced yet - that's OK,
+      // the app should handle role via Firestore profile during onboarding
+      try {
+        await admin.auth().setCustomUserClaims(uid, { role: 'teacher' });
+        console.log(`Set teacher claims for user: ${uid}`);
+      } catch (e: any) {
+        // Log but don't fail - the onboarding flow sets role in Firestore
+        console.log(`Note: Could not set custom claims via Admin SDK: ${e.code || e.message}`);
+        console.log('Continuing - role will be determined from Firestore profile');
+      }
 
-      // Force token refresh to pick up the new claims
+      // Force token refresh to pick up the new claims (if they were set)
       const refreshResult = await page.evaluate(async () => {
         // @ts-ignore - exposed by firebase.ts for testing
         const firebaseAuth = window.__FIREBASE_AUTH__;
@@ -351,13 +360,12 @@ test.describe('Storage UI End-to-End Tests', () => {
 
     // Complete onboarding if needed and ensure we're on teacher dashboard
     await completeOnboarding(page);
-    await page.waitForTimeout(1000);
 
     console.log('On teacher dashboard:', page.url());
 
     // Navigate to courses page to see the course list
     await page.goto(`${BASE_URL}/teacher/courses`);
-    await page.waitForTimeout(2000);
+    await page.waitForLoadState('domcontentloaded');
 
     console.log('On courses page:', page.url());
 
@@ -366,7 +374,6 @@ test.describe('Storage UI End-to-End Tests', () => {
     await manageButton.waitFor({ timeout: 10000 });
     await manageButton.click();
     await page.waitForURL('**/teacher/courses/**', { timeout: 10000 });
-    await page.waitForTimeout(1000);
 
     console.log('On course management page:', page.url());
 
@@ -374,7 +381,6 @@ test.describe('Storage UI End-to-End Tests', () => {
     const materialsTab = page.locator('[role="tab"]:has-text("Materials"), button:has-text("Course Materials")');
     if (await materialsTab.isVisible({ timeout: 5000 }).catch(() => false)) {
       await materialsTab.click();
-      await page.waitForTimeout(1000);
     }
 
     // Create and upload test file
@@ -406,22 +412,31 @@ test.describe('Storage UI End-to-End Tests', () => {
   test('Teacher can delete a file through the UI', async ({ page }) => {
     test.setTimeout(90000);
 
-    await signInWithEmulator(page);
+    const uid = await signInWithEmulator(page);
+
+    // Verify sign-in succeeded by checking we're not on login page
+    const currentUrl = page.url();
+    if (currentUrl.includes('/login') || !uid || uid === 'test-teacher-uid') {
+      throw new Error(`Sign-in failed. URL: ${currentUrl}, UID: ${uid}`);
+    }
 
     // Complete onboarding if needed and ensure we're on teacher dashboard
     await completeOnboarding(page);
-    await page.waitForTimeout(1000);
+
+    // Verify we made it to a teacher page
+    const urlAfterOnboarding = page.url();
+    if (!urlAfterOnboarding.includes('/teacher')) {
+      throw new Error(`Failed to reach teacher page. URL: ${urlAfterOnboarding}`);
+    }
 
     // Navigate directly to a mock course management page (cs101)
     await page.goto(`${BASE_URL}/teacher/courses/cs101`);
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(2000);
 
     // Click on Course Materials tab
     const materialsTab = page.locator('[role="tab"]:has-text("Materials"), button:has-text("Course Materials")');
     if (await materialsTab.isVisible({ timeout: 5000 }).catch(() => false)) {
       await materialsTab.click();
-      await page.waitForTimeout(1000);
     }
 
     // Upload a file first - use a unique filename
@@ -438,10 +453,15 @@ test.describe('Storage UI End-to-End Tests', () => {
     const uploadButton = page.locator('button:has-text("Upload")').first();
     await expect(uploadButton).toBeEnabled({ timeout: 5000 });
 
-    // Set up listener for console errors
+    // Track console errors for permission issues
+    let hasPermissionError = false;
     page.on('console', msg => {
       if (msg.type() === 'error') {
-        console.log('Browser console error:', msg.text());
+        const text = msg.text();
+        console.log('Browser console error:', text);
+        if (text.includes('unauthorized') || text.includes('permission') || text.includes('403')) {
+          hasPermissionError = true;
+        }
       }
     });
 
@@ -449,16 +469,9 @@ test.describe('Storage UI End-to-End Tests', () => {
     console.log('Clicking upload button...');
     await uploadButton.click();
 
-    // Wait for the button to show loading state
+    // Wait for the button to show loading state then return to normal
     const buttonText = await uploadButton.textContent();
     console.log('Button text after click:', buttonText);
-
-    // Wait a bit for the upload to process
-    await page.waitForTimeout(5000);
-
-    // Check the button state again
-    const buttonTextAfter = await uploadButton.textContent();
-    console.log('Button text after waiting:', buttonTextAfter);
 
     // Wait for upload to complete by checking for the file in the materials list
     const fileTitle = testFileName.replace('.txt', '');
@@ -471,10 +484,13 @@ test.describe('Storage UI End-to-End Tests', () => {
       await materialTitle.waitFor({ timeout: 30000 });
       console.log('File uploaded for deletion test:', fileTitle);
     } catch (e) {
-      // If upload didn't work, take a screenshot and log what's on the page
       console.log('Upload may have failed. Materials on page:');
       const materials = await page.locator('span.font-medium').allTextContents();
       console.log('Found materials:', materials);
+
+      if (hasPermissionError) {
+        throw new Error('Upload failed due to storage permissions - user custom claims not set. Ensure firebase.ts uses demo-project in development mode.');
+      }
       throw e;
     }
 
@@ -512,19 +528,7 @@ test.describe('Storage UI End-to-End Tests', () => {
       console.log('No toast appeared');
     }
 
-    // Wait a bit for the delete operation to complete and UI to update
-    await page.waitForTimeout(2000);
-
-    // Log console messages
-    if (consoleMessages.length > 0) {
-      console.log('Console messages during delete:', consoleMessages.slice(-10).join('\n'));
-    }
-
-    // Check if the material is still visible
-    const stillVisible = await materialTitle.isVisible();
-    console.log('Material still visible after delete:', stillVisible);
-
-    // Wait for deletion - the material should be removed from the list
+    // Wait for material to disappear (indicating delete completed)
     await expect(materialTitle).not.toBeVisible({ timeout: 20000 });
     console.log('File deleted successfully:', fileTitle);
 
@@ -538,12 +542,10 @@ test.describe('Storage UI End-to-End Tests', () => {
 
     // Complete onboarding if needed and ensure we're on teacher dashboard
     await completeOnboarding(page);
-    await page.waitForTimeout(1000);
 
     // Navigate directly to a mock course management page (cs101)
     await page.goto(`${BASE_URL}/teacher/courses/cs101`);
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(2000);
 
     // Click on Course Materials tab
     const materialsTab = page.locator('[role="tab"]:has-text("Materials"), button:has-text("Course Materials")');
@@ -562,12 +564,10 @@ test.describe('Storage UI End-to-End Tests', () => {
 
     // Complete onboarding if needed and ensure we're on teacher dashboard
     await completeOnboarding(page);
-    await page.waitForTimeout(1000);
 
     // Navigate directly to a mock course management page (cs101)
     await page.goto(`${BASE_URL}/teacher/courses/cs101`);
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(2000);
 
     // Click on Course Materials tab
     const materialsTab = page.locator('[role="tab"]:has-text("Materials"), button:has-text("Course Materials")');

@@ -6,8 +6,21 @@ import admin from "firebase-admin";
 // Guard this route so it's only available during test runs.
 const ENABLED = process.env.ENABLE_TEST_AUTH === "true";
 
+// Check if running with emulators (development mode)
+const IS_EMULATOR = process.env.NODE_ENV === "development" ||
+  !!process.env.FIREBASE_AUTH_EMULATOR_HOST ||
+  !!process.env.FIRESTORE_EMULATOR_HOST;
+
 function initAdmin() {
   if (admin.apps.length) return admin;
+
+  // In emulator mode, we can initialize without credentials
+  if (IS_EMULATOR) {
+    admin.initializeApp({
+      projectId: "demo-project",
+    });
+    return admin;
+  }
 
   let serviceAccount: any = null;
   if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
@@ -35,7 +48,10 @@ function initAdmin() {
 }
 
 export async function GET(req: Request) {
-  if (!ENABLED) return NextResponse.json({ error: "test auth disabled" }, { status: 403 });
+  // Allow in emulator mode OR when explicitly enabled
+  if (!ENABLED && !IS_EMULATOR) {
+    return NextResponse.json({ error: "test auth disabled" }, { status: 403 });
+  }
 
   const url = new URL(req.url);
   const uid = url.searchParams.get("uid") || `test-${Math.random().toString(36).slice(2, 8)}`;

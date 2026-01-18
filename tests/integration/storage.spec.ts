@@ -9,6 +9,10 @@
  *   npm run test:storage
  */
 
+// IMPORTANT: Set emulator env vars BEFORE importing firebase-admin
+process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
+process.env.FIREBASE_STORAGE_EMULATOR_HOST = '127.0.0.1:9199';
+
 import { test, expect } from '@playwright/test';
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, connectAuthEmulator, signInWithCustomToken, signOut } from 'firebase/auth';
@@ -43,11 +47,7 @@ test.describe('Firebase Storage Authorization', () => {
   let auth: any;
 
   test.beforeAll(async () => {
-    // Set emulator hosts for Admin SDK
-    process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
-    process.env.FIREBASE_STORAGE_EMULATOR_HOST = '127.0.0.1:9199';
-
-    // Initialize Client App
+    // Initialize Client App (emulator env vars already set at module level)
     if (getApps().length === 0) {
       app = initializeApp(firebaseConfig);
     } else {

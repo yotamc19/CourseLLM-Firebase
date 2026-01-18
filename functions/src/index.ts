@@ -81,9 +81,13 @@ async function updateDocumentStatusToUploaded(dataConnect: any, filePath: string
   }
 }
 
-// Triggered when ANY file is finalized (uploaded/created) in the default bucket.
-// No bucket specified = uses the project's default bucket automatically
+// Get the storage bucket from environment or use default naming convention
+const storageBucket = process.env.FIREBASE_STORAGE_BUCKET ||
+  `${process.env.GCLOUD_PROJECT || "demo-project"}.firebasestorage.app`;
+
+// Triggered when ANY file is finalized (uploaded/created) in the storage bucket.
 export const onFileUpload = onObjectFinalized(
+  {bucket: storageBucket},
   async (event: StorageEvent) => {
     logger.info("onFileUpload function triggered.", {event}); // Added for debugging
     const filePath = event.data?.name;
@@ -154,8 +158,8 @@ export const onFileUpload = onObjectFinalized(
 
 // Triggered when a file is deleted.
 // Checks if the deleted file has a corresponding .md file and deletes it.
-// No bucket specified = uses the project's default bucket automatically
 export const onFileDeleted = onObjectDeleted(
+  {bucket: storageBucket},
   async (event: StorageEvent) => {
     const filePath = event.data?.name;
     const bucketName = event.data?.bucket;

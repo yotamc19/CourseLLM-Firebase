@@ -1,3 +1,7 @@
+// IMPORTANT: Set emulator env vars BEFORE importing firebase-admin
+process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
+process.env.FIREBASE_STORAGE_EMULATOR_HOST = '127.0.0.1:9199';
+
 import { test, expect } from '@playwright/test';
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, connectAuthEmulator, signInWithCustomToken } from 'firebase/auth';
@@ -30,6 +34,53 @@ const firebaseConfig = {
 // These tests require Firebase Functions emulator to be running with functions deployed
 // Run: cd functions && npm run build && cd .. && firebase emulators:start
 
+// Helper to check if the Functions emulator has the required functions loaded
+async function areFunctionsLoaded(): Promise<{ running: boolean; hasOnFileUpload: boolean; hasOnFileDeleted: boolean }> {
+  try {
+    // Query the Functions emulator's backend info endpoint
+    const response = await fetch(`http://127.0.0.1:4400/emulators`, { method: 'GET' });
+    if (!response.ok) {
+      return { running: false, hasOnFileUpload: false, hasOnFileDeleted: false };
+    }
+
+    // Check if functions emulator is in the list
+    const data = await response.json();
+    const functionsEmulator = data?.functions;
+    if (!functionsEmulator) {
+      return { running: false, hasOnFileUpload: false, hasOnFileDeleted: false };
+    }
+
+    // Query the functions list from the emulator hub
+    // The functions emulator exposes function info at its port
+    try {
+      const functionsResponse = await fetch(`http://127.0.0.1:5001/demo-project/us-central1`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      });
+      const text = await functionsResponse.text();
+      // Check if our functions are mentioned in any response
+      const hasOnFileUpload = text.includes('onFileUpload') || text.includes('onObjectFinalized');
+      const hasOnFileDeleted = text.includes('onFileDeleted') || text.includes('onObjectDeleted');
+
+      // If we got any response from functions port, emulator is running
+      // But we need to check if functions are actually built
+      const libExists = fs.existsSync(path.resolve(__dirname, '../../functions/lib/index.js'));
+
+      return {
+        running: true,
+        hasOnFileUpload: libExists,
+        hasOnFileDeleted: libExists
+      };
+    } catch {
+      // Functions emulator port didn't respond properly
+      const libExists = fs.existsSync(path.resolve(__dirname, '../../functions/lib/index.js'));
+      return { running: true, hasOnFileUpload: libExists, hasOnFileDeleted: libExists };
+    }
+  } catch {
+    return { running: false, hasOnFileUpload: false, hasOnFileDeleted: false };
+  }
+}
+
 test.describe('Firebase Functions Triggers', () => {
   let app: any;
   let storage: any;
@@ -37,11 +88,7 @@ test.describe('Firebase Functions Triggers', () => {
   let server: http.Server;
 
   test.beforeAll(async () => {
-    // Set emulator hosts
-    process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
-    process.env.FIREBASE_STORAGE_EMULATOR_HOST = '127.0.0.1:9199';
-
-    // Initialize Client App
+    // Initialize Client App (emulator env vars already set at module level)
     if (getApps().length === 0) {
       app = initializeApp(firebaseConfig);
     } else {
@@ -89,6 +136,15 @@ test.describe('Firebase Functions Triggers', () => {
 
   test('onFileUpload should send POST request to conversion service', async () => {
     test.setTimeout(30000); // Increase timeout for function trigger
+
+    // Check if Functions emulator is running AND functions are built
+    const status = await areFunctionsLoaded();
+    if (!status.running) {
+      throw new Error('Functions emulator not running. Run: firebase emulators:start');
+    }
+    if (!status.hasOnFileUpload) {
+      throw new Error('Functions not built. Run: cd functions && npm run build');
+    }
 
     // Generate unique courseId first so we can filter webhooks by it
     const courseId = `course-func-${Date.now()}`;
@@ -160,6 +216,15 @@ test.describe('Firebase Functions Triggers', () => {
 
   test('onFileDeleted should delete corresponding .md file', async () => {
     test.setTimeout(15000);
+
+    // Check if Functions emulator is running AND functions are built
+    const status = await areFunctionsLoaded();
+    if (!status.running) {
+      throw new Error('Functions emulator not running. Run: firebase emulators:start');
+    }
+    if (!status.hasOnFileDeleted) {
+      throw new Error('Functions not built. Run: cd functions && npm run build');
+    }
 
     await signInAsTeacher();
     const courseId = `course-del-${Date.now()}`;
