@@ -5,7 +5,7 @@ This document guides you through setting up and running the CourseLLM-Firebase a
 ## Prerequisites
 
 *   Node.js (LTS version recommended)
-*   npm (or pnpm, as this project uses pnpm workspaces)
+*   npm
 *   Firebase CLI (install with `npm install -g firebase-tools`)
 *   Java Development Kit (JDK) version 11 or higher (required for Firebase Emulators)
 
@@ -20,11 +20,11 @@ cd CourseLLM-Firebase
 
 ## 2. Install Dependencies
 
-This project uses `pnpm` workspaces. Ensure `pnpm` is installed globally (`npm install -g pnpm`).
+This project uses `npm` workspaces. Ensure `npm` is installed globally (`npm install -g npm`).
 
 ```bash
 # Install dependencies for the root project and all workspaces
-pnpm install
+npm install
 ```
 
 This will install dependencies for the main Next.js app and the `functions` Firebase project. It will also automatically generate the Data Connect SDKs.
@@ -83,8 +83,8 @@ This command will start emulators for Authentication, Firestore, Storage, Functi
 In a separate terminal, start the Next.js development server:
 
 ```bash
-pnpm run dev
-# or pnpm dev
+npm run dev
+# or npm dev
 ```
 
 The frontend application should now be accessible at `http://localhost:9002`.
@@ -101,4 +101,4 @@ You can use Google Sign-In or test users created via the Firebase Authentication
 *   **Emulator Issues:** Check the terminal where `firebase emulators:start` is running for error messages.
 *   **"Failed to load function definition" / Timeout:** Ensure `getDataConnect` initialization is not blocking at the top level of your Cloud Functions. It should be inside the function handler. Also, verify `firebase-admin` and `@dataconnect/admin-generated` dependencies are correctly installed and compatible.
 *   **File Uploads / Functions Not Triggering:** Double-check that the `bucket` name in your Cloud Function triggers (e.g., `onObjectFinalized({ bucket: "your-bucket-name" })`) matches your `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` from `.env.local`.
-*   **Missing Dependencies:** If you encounter module not found errors, try running `pnpm install` again.
+*   **Missing Dependencies:** If you encounter module not found errors, try running `npm install` again.

@@ -5,14 +5,31 @@ import { getStorage, connectStorageEmulator } from "firebase/storage";
 import { getDataConnect, connectDataConnectEmulator } from "firebase/data-connect";
 import { connectorConfig } from "@dataconnect/generated";
 
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-};
+// Try to get config from Firebase App Hosting's auto-injected FIREBASE_WEBAPP_CONFIG first,
+// then fall back to NEXT_PUBLIC_* env vars for local development
+function getFirebaseConfig() {
+  // Firebase App Hosting injects this at build time
+  const webappConfig = process.env.NEXT_PUBLIC_FIREBASE_WEBAPP_CONFIG || process.env.FIREBASE_WEBAPP_CONFIG;
+  if (webappConfig) {
+    try {
+      return JSON.parse(webappConfig);
+    } catch (e) {
+      console.warn("Failed to parse FIREBASE_WEBAPP_CONFIG:", e);
+    }
+  }
+
+  // Fall back to individual env vars (for local dev with .env.local)
+  return {
+    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  };
+}
+
+const firebaseConfig = getFirebaseConfig();
 
 const app = initializeApp(firebaseConfig);
 

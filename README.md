@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-How to run the app locally: Firebase emulators + Python backend + Next.js frontend.
+This README explains how to run the CourseLLM app locally. It covers environment setup, running the 3 required services (Firebase emulators, Python backend, Next.js frontend), testing, authentication, and technical details about the project structure, dependencies, DataConnect schema, and DSPy API.
 
 ---
 
@@ -115,7 +115,19 @@ The dev script is configured to run on port **9002**, so the frontend is at:
 
 ---
 
-## 5. Ports Summary
+## 5. Running Tests
+
+With all 3 terminals running (emulators, Python backend, Next.js), run:
+
+```bash
+npm run test:e2e
+```
+
+This runs all 43 tests (unit, API, E2E, and integration tests).
+
+---
+
+## 6. Ports Summary
 
 - Emulator UI: `http://127.0.0.1:4000`
 - Firestore emulator: `127.0.0.1:8080`
@@ -127,7 +139,9 @@ The dev script is configured to run on port **9002**, so the frontend is at:
 
 ---
 
-## 6. How to Login
+## 7. How to Login
+
+**Authentication method:** Firebase Authentication with Google Sign-In (OAuth 2.0)
 
 Navigate to `http://localhost:9002/login` and click "Sign in with Google".
 - New users are redirected to `/onboarding` to complete their profile
@@ -135,7 +149,29 @@ Navigate to `http://localhost:9002/login` and click "Sign in with Google".
 
 ---
 
-## 7. Dependencies (high level)
+## 8. Project Structure
+
+```
+CourseLLM-Firebase/
+├── docs/                         # Documentation
+│   ├── Course Project/           # Project specifications (see table below)
+│   └── [other]                   # Auth/, File Upload/
+├── tests/                        # Playwright E2E tests
+└── [other]                       # src/, dataconnect/, functions/, config files
+```
+
+### Course Project Documentation
+
+| # | Required Document | File |
+|---|---|---|
+| 1 | Project definition | `docs/Course Project/1-project-definition.md` |
+| 3 | Specification documents | `docs/Course Project/2-specification-documents.md` |
+| 4 | Architecture specification (APIs, components) | `docs/Course Project/3-architecture-specification.md` |
+| 8 | Project report and AI process analysis | `docs/Course Project/4-project-report-ai-analysis.md` |
+
+---
+
+## 9. Dependencies
 
 ### JavaScript / Next.js
 
@@ -166,7 +202,7 @@ Python dependencies are defined in `requirements.txt`:
 
 ---
 
-## 8. Production Environment
+## 9. Production Environment
 
 For production deployment, create a `.env` file (not `.env.local`) with production Firebase values:
 
@@ -189,7 +225,7 @@ GOOGLE_API_KEY=your-google-api-key
 
 ---
 
-## 9. DataConnect (PostgreSQL)
+## 10. DataConnect (PostgreSQL)
 
 This project uses Firebase DataConnect with Cloud SQL (PostgreSQL).
 
@@ -241,7 +277,7 @@ After running `npm install` (which triggers `npm run dataconnect:generate`):
 
 ---
 
-## 10. DSPy Backend API (overview)
+## 11. DSPy Backend API (overview)
 
 The Python backend exposes a small HTTP API (FastAPI) on `http://127.0.0.1:8001`.  
 The Next.js app calls these endpoints via server actions in  
@@ -249,46 +285,48 @@ The Next.js app calls these endpoints via server actions in
 
 All endpoints are **POST** and use JSON.
 
-### 10.1 `POST /answer`
+### 11.1 `POST /answer`
 
-- **Purpose:** Answer a student’s question about a course.
-- **Request body (simplified):**
-  - `courseId`: string
+- **Purpose:** Answer a student's question using course materials.
+- **Request body:**
+  - `course_materials`: array of strings
   - `question`: string
-  - optional metadata (e.g., context, user id)
-- **Response (simplified):**
-  - `answer`: string
-  - optional: `reasoning`, `sources`
+  - `use_socratic`: boolean (optional, default false)
+- **Response:**
+  - `response`: string
+  - `type`: string
 
-### 10.2 `POST /assess`
+### 11.2 `POST /assess`
 
-- **Purpose:** Assess a student’s free-text answer.
-- **Request body (simplified):**
-  - `courseId`: string
+- **Purpose:** Assess a student's answer and provide feedback.
+- **Request body:**
   - `question`: string
-  - `studentAnswer`: string
-- **Response (simplified):**
-  - `score`: number (e.g., 0–100 or 0–1)
-  - `feedback`: string
+  - `student_answer`: string
+  - `correct_answer`: string
+  - `topic`: string
+- **Response:**
+  - `assessment`: string
+  - `understanding_level`: string
+  - `follow_up_questions`: array of strings
 
-### 10.3 `POST /summarize`
+### 11.3 `POST /summarize`
 
-- **Purpose:** Summarize course content or a given text.
-- **Request body (simplified):**
-  - `courseId`: string
-  - `content`: string
-- **Response (simplified):**
+- **Purpose:** Summarize course materials.
+- **Request body:**
+  - `materials`: array of strings
+- **Response:**
   - `summary`: string
+  - `key_points`: array of strings
 
-### 10.4 `POST /quiz`
+### 11.4 `POST /quiz`
 
-- **Purpose:** Generate quiz questions for a course.
-- **Request body (simplified):**
-  - `courseId`: string
-  - optional: `numQuestions`: number
-- **Response (simplified):**
-  - `questions`: array of question objects (e.g., `text`, `options`, `correctOptionIndex`)
+- **Purpose:** Generate quiz questions from course material.
+- **Request body:**
+  - `material_content`: string
+  - `difficulty`: string (optional, default "medium")
+  - `num_questions`: number (optional, default 5)
+- **Response:**
+  - `questions`: array of question objects
 
-For exact schemas, see the Pydantic models in `src/ai/dspy/api.py`.  
-For usage examples, see the server actions in  
-`src/app/student/courses/[courseId]/dspy-actions.ts`.
+For exact schemas, see the Pydantic models in `src/ai/dspy/api.py`.
+

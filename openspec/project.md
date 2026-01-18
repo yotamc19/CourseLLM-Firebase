@@ -10,13 +10,16 @@ CourseLLM-Firebase (Coursewise) is an educational platform that leverages AI to 
 ## Tech Stack
 - **Frontend Framework**: Next.js 15 with React 18 (TypeScript)
 - **Styling**: Tailwind CSS with Radix UI components
-- **Backend/Functions**: Firebase Cloud Functions, Firebase Admin SDK
-- **Database**: Firestore (NoSQL document database)
-- **Authentication**: Firebase Authentication (Google OAuth)
-- **AI/ML**: Google Genkit 1.20.0 with Google GenAI models (default: gemini-2.5-flash)
-- **Data**: Firebase DataConnect (GraphQL layer over Firestore)
-- **Testing**: Playwright for E2E tests
-- **Dev Tools**: TypeScript 5, pnpm workspace, Node.js
+- **Backend/Functions**: Firebase Cloud Functions (v2), Firebase Admin SDK
+- **Database**: Firebase DataConnect (PostgreSQL via Cloud SQL)
+- **Storage**: Firebase Storage with role-based access control
+- **Authentication**: Firebase Authentication (Google OAuth) with custom claims for roles
+- **AI/ML**:
+  - DSPy with Google Gemini for course Q&A, assessment, summarization, and quiz generation
+  - Python FastAPI backend (`src/ai/dspy/api.py`) running on port 8001
+- **Data**: Firebase DataConnect (GraphQL layer with auto-generated TypeScript types)
+- **Testing**: Playwright for E2E, integration, and unit tests (43 tests)
+- **Dev Tools**: TypeScript 5, npm, Node.js 22
 - **Deployment**: Firebase Hosting, App Hosting
 
 ## Project Conventions
@@ -52,37 +55,50 @@ CourseLLM-Firebase (Coursewise) is an educational platform that leverages AI to 
   - AI models configured in `src/ai/genkit.ts`
   - Server-side AI function execution
 - **Data Layer**:
-  - Firestore for persistent storage (user profiles, course data, etc.)
   - DataConnect for strongly-typed GraphQL queries (auto-generated into `src/dataconnect-generated/`)
-  - Firestore security rules enforce role-based access
+  - PostgreSQL database via Cloud SQL (managed by DataConnect)
+  - Firebase Storage for course materials with security rules enforcing role-based access
+- **Storage Security**:
+  - Only teachers and admins can upload/delete files (`request.auth.token.role in ['teacher', 'admin']`)
+  - All authenticated users can read course materials
+  - Security rules defined in `storage.rules`
+- **Cloud Functions** (v2):
+  - `onFileUpload`: Triggered when files are uploaded to Storage, sends to conversion service
+  - `onFileDeleted`: Triggered when files are deleted, cleans up corresponding `.md` files
 - **File Structure**:
   ```
   src/
-    app/          → Next.js pages and layouts
+    app/          → Next.js pages and layouts (teacher/, student/, login, onboarding)
     components/   → Reusable React components
     lib/          → Utilities, auth, firebase init, types
-    ai/           → Genkit flows and model config
+    ai/
+      dspy/       → DSPy-based AI endpoints (Python FastAPI)
     dataconnect-generated/  → Auto-generated DataConnect types
-  functions/    → Firebase Cloud Functions
+  functions/    → Firebase Cloud Functions (onFileUpload, onFileDeleted)
   dataconnect/  → DataConnect schema and queries
-  tests/        → Playwright E2E tests
-  docs/         → Documentation (auth implementation, PRD, etc.)
+  tests/        → Playwright tests (unit, integration, e2e, api)
+  docs/         → Documentation
+  openspec/     → Project specification
   ```
 
 ### Testing Strategy
-- **E2E Testing**: Playwright for user flows
-  - Tests located in `tests/auth.spec.ts` (auth flows)
-  - Configuration in `tests/playwright.config.ts`
-  - Test-only API route (`/api/test-token`) uses Firebase custom tokens
-  - Key scenarios: first-time login → onboarding, role-based redirects, logout
-- **Unit Testing**: Not yet formalized; component testing via Playwright
-- **Manual Testing**:
-  - Dev server: `npm run dev` (runs on port 9002)
-  - Genkit development: `npm run genkit:watch`
-- **CI/CD**: Tests run via `npm run test:e2e`
+- **Test Suite**: 43 Playwright tests across 4 categories:
+  - **Unit tests** (`tests/unit/unit.spec.ts`): Type definitions, validation, utilities
+  - **Integration tests** (`tests/integration/`):
+    - `storage.spec.ts`: Storage RBAC (teacher/admin can write, students blocked)
+    - `dataconnect.spec.ts`: DataConnect CRUD operations
+    - `functions-trigger.spec.ts`: Cloud Functions triggers (onFileUpload, onFileDeleted)
+  - **E2E tests** (`tests/end-to-end/`):
+    - `auth.spec.ts`: Authentication flows (login, onboarding, redirects)
+    - `storage-ui.spec.ts`: File upload/delete through UI
+  - **API tests** (`tests/api/api.spec.ts`): DSPy endpoints (answer, assess, summarize, quiz)
+- **Configuration**: `tests/playwright.config.ts`
+- **Running Tests**:
+  - Requires: Firebase emulators (`firebase emulators:start`), Next.js dev server (`npm run dev`), DSPy API (`uvicorn src.ai.dspy.api:app --port 8001`)
+  - Command: `npm run test:e2e`
 - **Test Environment Variables**:
   - `ENABLE_TEST_AUTH=true` (enables test-only routes)
-  - `FIREBASE_SERVICE_ACCOUNT_PATH` or `FIREBASE_SERVICE_ACCOUNT_JSON` (Admin SDK credentials)
+  - Project ID read dynamically from `.firebaserc`
 
 ### Git Workflow
 - **Primary Branch**: `main` (default)
@@ -92,13 +108,19 @@ CourseLLM-Firebase (Coursewise) is an educational platform that leverages AI to 
 
 ## Domain Context
 ### Educational Platform
-- **Users**: Students and Teachers
-- **Student Workflow**: Authenticate → Onboarding (select role, department, courses) → Student dashboard → Access assessments and course materials
-- **Teacher Workflow**: Authenticate → Onboarding → Teacher dashboard → Manage courses and student progress
-- **Course Model**: Courses tracked in user profiles; DataConnect schema defines the data model
-- **AI Features**:
-  - **Socratic Course Chat**: AI-powered tutoring that guides students through course concepts using Socratic questioning
-  - **Personalized Learning Assessment**: AI-driven assessment of student knowledge with recommendations
+- **Users**: Students, Teachers, and Admins (role-based via custom claims)
+- **Student Workflow**: Authenticate → Onboarding (select role, department, courses) → Student dashboard → Access course materials and AI tutoring
+- **Teacher Workflow**: Authenticate → Onboarding → Teacher dashboard → Manage courses, upload materials, view student progress
+- **Course Model**: Courses and SourceDocuments stored in DataConnect (PostgreSQL); materials stored in Firebase Storage
+- **AI Features** (via DSPy + Gemini):
+  - **Question Answering**: Answer student questions based on course materials (with optional Socratic mode)
+  - **Assessment**: Evaluate student answers and provide understanding levels
+  - **Summarization**: Generate summaries and key points from course content
+  - **Quiz Generation**: Auto-generate quiz questions from materials
+- **File Processing**:
+  - Teachers upload course materials (PDF, PPT, DOC, MD, TXT)
+  - Cloud Function triggers on upload → sends to conversion service
+  - Converted files stored as `.md` for AI processing
 
 ### Firebase/Google Cloud Ecosystem
 - Project uses Firebase emulators locally for development (Firestore, Auth, Functions, DataConnect, Storage)
@@ -108,31 +130,39 @@ CourseLLM-Firebase (Coursewise) is an educational platform that leverages AI to 
 ## Important Constraints
 - **Authentication Security**:
   - Test-only token route (`ENABLE_TEST_AUTH`) must never be enabled in production
-  - Firestore rules enforce user isolation (clients can only read/write their own profile)
+  - Custom claims (`role: 'teacher' | 'student' | 'admin'`) set via Admin SDK
+  - Storage rules enforce role-based write access (teachers/admins only)
   - Server-side Admin SDK writes bypass security rules (used for onboarding in tests)
 - **Client SDK Limitations**:
   - Google OAuth popup flows can be blocked by browser policies (fallback to redirect)
-  - IndexedDB persistence for Firestore is best-effort (may fail in some environments)
+  - Token refresh required after setting custom claims (`getIdToken(true)`)
 - **Model Configuration**:
-  - Default AI model: `gemini-2.5-flash` (via Google GenAI plugin)
-  - Can be overridden in `src/ai/genkit.ts`
+  - AI model: Google Gemini (via DSPy Google provider)
+  - DSPy API must be running on port 8001 for AI features
 - **Environment Variables**:
   - All Firebase config keys must be prefixed with `NEXT_PUBLIC_` to be accessible in browser
   - Service account JSON for Admin SDK should never be committed to repo
+  - Project ID read from `.firebaserc` for portability across environments
 
 ## External Dependencies
 - **Google Cloud / Firebase**:
   - Firebase Authentication (Google OAuth provider)
-  - Firestore Database
-  - Firebase Storage
-  - Firebase Cloud Functions
+  - Firebase Storage (course materials)
+  - Firebase Cloud Functions v2 (storage triggers)
   - Firebase App Hosting
-  - Google Genkit with Google GenAI models (Gemini)
-  - Firebase DataConnect (GraphQL data layer)
-- **Radix UI**: Accessible, unstyled component primitives
-- **Tailwind CSS**: Utility-first CSS framework
-- **React Hook Form + Zod**: Form handling and validation
-- **Recharts**: Data visualization library
-- **Date-fns**: Date manipulation library
-- **Lucide React**: Icon library
-- **Playwright**: Browser automation for E2E testing
+  - Firebase DataConnect (PostgreSQL via Cloud SQL)
+  - Google Gemini (via DSPy)
+- **Python/AI**:
+  - DSPy: LLM framework for structured AI outputs
+  - FastAPI/Uvicorn: Python web framework for AI API
+  - Google GenerativeAI: Gemini model access
+- **Frontend**:
+  - Radix UI: Accessible, unstyled component primitives
+  - Tailwind CSS: Utility-first CSS framework
+  - React Hook Form + Zod: Form handling and validation
+  - Recharts: Data visualization library
+  - Lucide React: Icon library
+  - Sonner: Toast notifications
+- **Testing**:
+  - Playwright: Browser automation for E2E testing
+  - Firebase Admin SDK: Server-side testing utilities

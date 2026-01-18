@@ -4,8 +4,7 @@ service firebase.storage {
   match /b/{bucket}/o {
     // Allow authenticated users to read and write their course materials
     match /courses/{courseId}/materials/{documentId} {
-      // For emulator testing: allow any authenticated user to write
-      // In production, you would check custom claims for teacher/admin role
+      // Any authenticated user can write (for demo - in production, check custom claims)
       allow write: if request.auth != null;
       // All authenticated users can read (e.g. students)
       allow read: if request.auth != null;

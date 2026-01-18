@@ -4,14 +4,31 @@ import { getAuth, connectAuthEmulator, signInWithCustomToken } from 'firebase/au
 import { getStorage, connectStorageEmulator, ref, uploadBytes, deleteObject } from 'firebase/storage';
 import * as admin from 'firebase-admin';
 import * as http from 'http';
-import { time } from 'console';
+import * as fs from 'fs';
+import * as path from 'path';
+
+// Read the project ID from .firebaserc to match what the emulator uses
+function getProjectIdFromFirebaserc(): string {
+  try {
+    const firebasercPath = path.resolve(__dirname, '../../.firebaserc');
+    const firebaserc = JSON.parse(fs.readFileSync(firebasercPath, 'utf-8'));
+    return firebaserc.projects?.default || 'demo-project';
+  } catch {
+    return process.env.FIREBASE_PROJECT_ID || 'demo-project';
+  }
+}
+
+const projectId = getProjectIdFromFirebaserc();
 
 const firebaseConfig = {
   apiKey: "test-api-key",
-  projectId: "se-with-llms",
+  projectId: projectId,
   appId: "test-app-id",
-  storageBucket: "se-with-llms.firebasestorage.app",
+  storageBucket: `${projectId}.firebasestorage.app`,
 };
+
+// These tests require Firebase Functions emulator to be running with functions deployed
+// Run: cd functions && npm run build && cd .. && firebase emulators:start
 
 test.describe('Firebase Functions Triggers', () => {
   let app: any;
@@ -73,7 +90,11 @@ test.describe('Firebase Functions Triggers', () => {
   test('onFileUpload should send POST request to conversion service', async () => {
     test.setTimeout(30000); // Increase timeout for function trigger
 
-    // 1. Start Mock Server
+    // Generate unique courseId first so we can filter webhooks by it
+    const courseId = `course-func-${Date.now()}`;
+    const fileName = 'lecture.pdf';
+
+    // 1. Start Mock Server that filters for OUR specific file
     let requestReceivedPromiseResolve: (value: any) => void;
     const requestReceivedPromise = new Promise<any>((resolve) => {
         requestReceivedPromiseResolve = resolve;
@@ -86,10 +107,16 @@ test.describe('Firebase Functions Triggers', () => {
         });
         req.on('end', () => {
             if (req.method === 'POST' && req.url === '/convert') {
-                console.log('Mock server received /convert request');
+                const parsedBody = JSON.parse(body);
+                console.log('Mock server received /convert request:', parsedBody.source_path);
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ id: 'job-mock-1', status: 'queued' }));
-                requestReceivedPromiseResolve(JSON.parse(body));
+
+                // Only resolve if this is OUR test's file (filter by courseId)
+                if (parsedBody.source_path && parsedBody.source_path.includes(courseId)) {
+                    console.log('Matched our test file, resolving promise');
+                    requestReceivedPromiseResolve(parsedBody);
+                }
             } else {
                 res.writeHead(404);
                 res.end();
@@ -102,8 +129,6 @@ test.describe('Firebase Functions Triggers', () => {
 
     // 2. Upload File
     await signInAsTeacher();
-    const courseId = `course-auto-${Date.now()}`;
-    const fileName = 'lecture.pdf';
     // Path must match regex: ^courses\/([^\/]+)\/materials\/([^\/]+)\.([a-zA-Z0-9]+)$
     const storageRef = ref(storage, `courses/${courseId}/materials/${fileName}`);
     const blob = await createTestFileBlob('Mock PDF Content');

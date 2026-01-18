@@ -9,8 +9,6 @@
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
-package-lock.json
-
 # testing
 /coverage
 *.test.js
@@ -111,14 +109,15 @@ public/uploads/
 
 
 # package manager lock files (optional - uncomment if you want to ignore)
-package-lock.json
+# package-lock.json
 yarn.lock
 pnpm-lock.yaml
 
 # dataconnect
 dataconnect/.dataconnect
-src/dataconnect-generated/
-src/dataconnect-admin-generated/
+# Allow generated SDKs for deployment
+# src/dataconnect-generated/
+# src/dataconnect-admin-generated/
 
 
 

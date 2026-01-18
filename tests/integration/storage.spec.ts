@@ -14,12 +14,27 @@ import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, connectAuthEmulator, signInWithCustomToken, signOut } from 'firebase/auth';
 import { getStorage, connectStorageEmulator, ref, uploadBytes, deleteObject, getBytes } from 'firebase/storage';
 import * as admin from 'firebase-admin';
+import * as fs from 'fs';
+import * as path from 'path';
+
+// Read the project ID from .firebaserc to match what the emulator uses
+function getProjectIdFromFirebaserc(): string {
+  try {
+    const firebasercPath = path.resolve(__dirname, '../../.firebaserc');
+    const firebaserc = JSON.parse(fs.readFileSync(firebasercPath, 'utf-8'));
+    return firebaserc.projects?.default || 'demo-project';
+  } catch {
+    return process.env.FIREBASE_PROJECT_ID || 'demo-project';
+  }
+}
+
+const projectId = getProjectIdFromFirebaserc();
 
 const firebaseConfig = {
   apiKey: "test-api-key",
-  projectId: "coursellm-firebase",
+  projectId: projectId,
   appId: "test-app-id",
-  storageBucket: "coursellm-firebase.appspot.com",
+  storageBucket: `${projectId}.firebasestorage.app`,
 };
 
 test.describe('Firebase Storage Authorization', () => {

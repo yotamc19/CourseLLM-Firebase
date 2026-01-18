@@ -11,8 +11,10 @@
 import { test, expect } from '@playwright/test';
 import { initializeApp, getApps, deleteApp } from 'firebase/app';
 import { getDataConnect, connectDataConnectEmulator } from 'firebase/data-connect';
-import { 
-  connectorConfig, 
+import * as fs from 'fs';
+import * as path from 'path';
+import {
+  connectorConfig,
   // User operations
   insertUser,
   updateUser,
@@ -34,12 +36,23 @@ import {
   listSourceDocuments,
   listCourseDocuments,
   getSourceDocument,
-  DocumentStatus 
+  DocumentStatus
 } from '@dataconnect/generated';
+
+// Read the project ID from .firebaserc to match what the emulator uses
+function getProjectIdFromFirebaserc(): string {
+  try {
+    const firebasercPath = path.resolve(__dirname, '../../.firebaserc');
+    const firebaserc = JSON.parse(fs.readFileSync(firebasercPath, 'utf-8'));
+    return firebaserc.projects?.default || 'demo-project';
+  } catch {
+    return process.env.FIREBASE_PROJECT_ID || 'demo-project';
+  }
+}
 
 const firebaseConfig = {
   apiKey: "test-api-key",
-  projectId: "coursellm-firebase", 
+  projectId: getProjectIdFromFirebaserc(),
   appId: "test-app-id",
 };
 

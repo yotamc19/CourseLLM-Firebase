@@ -37,8 +37,8 @@ The Firebase Cloud Function `onFileUpload` plays a critical role in post-upload 
 
 1.  **Trigger Configuration**:
     *   Triggered by `onObjectFinalized` (file uploading) event in Firebase Storage.
-    *   Configured to listen to the bucket: `"cs-chatbots.firebasestorage.app"`, matching the frontend's upload target.
-    *   It should match the `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` in `.env.local`.
+    *   Configured to listen to the bucket specified in your Firebase project.
+    *   It must match the `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` in your `.env.local`.
 3.  **Data Connect Initialization**:
     *   `getDataConnect(connectorConfig)`: Initializes the Data Connect client. This is now done inside the function handler to prevent blocking during function deployment/startup. The `connectorConfig` is imported directly from `@dataconnect/admin-generated` for robustness.
 4.  **Path Parsing and Filtering**:

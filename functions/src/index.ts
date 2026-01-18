@@ -9,15 +9,15 @@
 
 import {setGlobalOptions} from "firebase-functions";
 import * as logger from "firebase-functions/logger";
-import {onObjectFinalized, onObjectDeleted} from "firebase-functions/v2/storage";
+import {onObjectFinalized, onObjectDeleted, StorageEvent} from "firebase-functions/v2/storage";
 import * as admin from "firebase-admin";
-import { getDataConnect } from 'firebase-admin/data-connect';
-import { 
-  getSourceDocumentByStoragePath, 
-  updateDocumentStatus, 
+import {getDataConnect} from "firebase-admin/data-connect";
+import {
+  getSourceDocumentByStoragePath,
+  updateDocumentStatus,
   DocumentStatus,
-  connectorConfig
-} from '@dataconnect/admin-generated';
+  connectorConfig,
+} from "@dataconnect/admin-generated";
 
 admin.initializeApp();
 
@@ -42,8 +42,6 @@ const FILE_CONVERSION_SERVICE_BASE_URL =
   process.env.FILE_CONVERSION_SERVICE_BASE_URL || "http://localhost:8000";
 
 
-import { StorageEvent } from 'firebase-functions/v2/storage';
-
 /**
  * Helper to parse courseId and fileName from storage path.
  * Expected format: courses/{courseId}/materials/{fileName}.{ext}
@@ -55,7 +53,7 @@ function parseStoragePath(filePath: string): { courseId: string, fileName: strin
     return {
       courseId: match[1],
       fileName: match[2],
-      fileExtension: match[3]
+      fileExtension: match[3],
     };
   }
   return null;
@@ -65,29 +63,29 @@ function parseStoragePath(filePath: string): { courseId: string, fileName: strin
  * Helper to update document status in Data Connect.
  */
 async function updateDocumentStatusToUploaded(dataConnect: any, filePath: string) {
-    try {
-        const result = await getSourceDocumentByStoragePath(dataConnect, { storagePath: filePath });
-        if (result.data.sourceDocuments.length > 0) {
-            const doc = result.data.sourceDocuments[0];
-            await updateDocumentStatus(dataConnect, {
-                id: doc.id,
-                status: DocumentStatus.UPLOADED,
-                storagePath: filePath
-            });
-            logger.info(`Updated document status to UPLOADED for ${doc.id}`);
-        } else {
-             logger.warn(`No SourceDocument found for path: ${filePath}`);
-        }
-    } catch (dcError) {
-        logger.error("Error updating Data Connect status:", dcError);
+  try {
+    const result = await getSourceDocumentByStoragePath(dataConnect, {storagePath: filePath});
+    if (result.data.sourceDocuments.length > 0) {
+      const doc = result.data.sourceDocuments[0];
+      await updateDocumentStatus(dataConnect, {
+        id: doc.id,
+        status: DocumentStatus.UPLOADED,
+        storagePath: filePath,
+      });
+      logger.info(`Updated document status to UPLOADED for ${doc.id}`);
+    } else {
+      logger.warn(`No SourceDocument found for path: ${filePath}`);
     }
+  } catch (dcError) {
+    logger.error("Error updating Data Connect status:", dcError);
+  }
 }
 
 // Triggered when ANY file is finalized (uploaded/created) in the default bucket.
+// No bucket specified = uses the project's default bucket automatically
 export const onFileUpload = onObjectFinalized(
-  { bucket: "se-with-llms.firebasestorage.app" },
   async (event: StorageEvent) => {
-    logger.info("onFileUpload function triggered.", { event }); // Added for debugging
+    logger.info("onFileUpload function triggered.", {event}); // Added for debugging
     const filePath = event.data?.name;
     const bucketName = event.data?.bucket;
 
@@ -105,7 +103,7 @@ export const onFileUpload = onObjectFinalized(
       return;
     }
 
-    const { courseId, fileName, fileExtension } = pathInfo;
+    const {courseId, fileName, fileExtension} = pathInfo;
     console.log(`Processing file: ${fileName}.${fileExtension} for course: ${courseId}`);
 
     // Construct the Google Cloud Storage path (gs://bucket/path/to/file)
@@ -142,22 +140,22 @@ export const onFileUpload = onObjectFinalized(
         return;
       }
 
-    const jobResponse = await response.json();
-    logger.info(
-      "Convert request successful, job enqueued.",
-      {jobId: jobResponse.id, status: jobResponse.status}
-    );
+      const jobResponse = await response.json();
+      logger.info(
+        "Convert request successful, job enqueued.",
+        {jobId: jobResponse.id, status: jobResponse.status}
+      );
 
     // TODO: Consider storing the jobResponse in Firestore linked to the uploaded file.
-  } catch (error) {
-    logger.error("Error sending convert request:", error);
-  }
-});
+    } catch (error) {
+      logger.error("Error sending convert request:", error);
+    }
+  });
 
 // Triggered when a file is deleted.
 // Checks if the deleted file has a corresponding .md file and deletes it.
+// No bucket specified = uses the project's default bucket automatically
 export const onFileDeleted = onObjectDeleted(
-  { bucket: "se-with-llms.firebasestorage.app" },
   async (event: StorageEvent) => {
     const filePath = event.data?.name;
     const bucketName = event.data?.bucket;
