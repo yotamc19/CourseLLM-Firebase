@@ -167,9 +167,9 @@ CourseLLM-Firebase/
 | # | Required Document | File |
 |---|---|---|
 | 1 | Project definition | `docs/Course Project/1-project-definition.md` |
-| 3 | Specification documents | `docs/Course Project/2-specification-documents.md` |
-| 4 | Architecture specification (APIs, components) | `docs/Course Project/3-architecture-specification.md` |
-| 8 | Project report and AI process analysis | `docs/Course Project/4-project-report-ai-analysis.md` |
+| 2 | Specification documents | `docs/Course Project/2-specification-documents.md` |
+| 3 | Architecture specification (APIs, components) | `docs/Course Project/3-architecture-specification.md` |
+| 4 | Project report and AI process analysis | `docs/Course Project/4-project-report-ai-analysis.md` |
 
 ---
 
