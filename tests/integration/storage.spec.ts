@@ -74,7 +74,6 @@ test.describe('Firebase Storage Authorization', () => {
       });
     }
 
-    console.log('Storage RBAC tests initialized.');
   });
 
   /**
@@ -114,8 +113,7 @@ test.describe('Firebase Storage Authorization', () => {
 
     // Delete
     await deleteObject(storageRef);
-    console.log(`Deleted file: ${storageRef}`);
-    // Verify deletion (attempt to upload again, it should be successful as previous one is deleted)
+    // Verify deletion (attempt to get bytes should fail)
     await expect(getBytes(storageRef)).rejects.toThrow(/not-found/);
   });
 

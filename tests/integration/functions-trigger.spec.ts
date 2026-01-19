@@ -164,13 +164,11 @@ test.describe('Firebase Functions Triggers', () => {
         req.on('end', () => {
             if (req.method === 'POST' && req.url === '/convert') {
                 const parsedBody = JSON.parse(body);
-                console.log('Mock server received /convert request:', parsedBody.source_path);
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ id: 'job-mock-1', status: 'queued' }));
 
                 // Only resolve if this is OUR test's file (filter by courseId)
                 if (parsedBody.source_path && parsedBody.source_path.includes(courseId)) {
-                    console.log('Matched our test file, resolving promise');
                     requestReceivedPromiseResolve(parsedBody);
                 }
             } else {
@@ -181,7 +179,6 @@ test.describe('Firebase Functions Triggers', () => {
     });
 
     await new Promise<void>((resolve) => server.listen(8000, resolve));
-    console.log('Mock server listening on port 8000');
 
     // 2. Upload File
     await signInAsTeacher();
@@ -190,27 +187,21 @@ test.describe('Firebase Functions Triggers', () => {
     const blob = await createTestFileBlob('Mock PDF Content');
 
     await uploadBytes(storageRef, blob);
-    console.log(`Uploaded file to ${storageRef.fullPath}`);
 
     try {
         // 3. Wait for Trigger
-        console.log('Waiting for webhook...');
-        // Add a timeout to fail faster if function doesn't fire
         const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout waiting for webhook')), 15000));
-        
+
         const requestBody = await Promise.race([requestReceivedPromise, timeoutPromise]);
 
         // 4. Validate
-        console.log('Webhook received:', requestBody);
-        
         expect(requestBody).toHaveProperty('source_path');
         expect(requestBody.source_path).toContain(`courses/${courseId}/materials/${fileName}`);
         // Check for gs:// prefix and bucket
         expect(requestBody.source_path).toMatch(/^gs:\/\/[^\/]+\/courses\/.*$/);
     } finally {
         // Cleanup: Delete the uploaded file
-        await deleteObject(storageRef).catch(e => console.warn(`Cleanup: File '${fileName}' might not have existed or error during deletion: ${e.message}`));
-        console.log(`Cleanup performed for test: ${courseId}`);
+        await deleteObject(storageRef).catch(() => {});
     }
   });
 
@@ -252,10 +243,8 @@ test.describe('Firebase Functions Triggers', () => {
 
     // 2. Delete the original file
     await deleteObject(originalRef);
-    console.log(`Deleted file: ${originalRef.fullPath}`);
 
     // 3. Wait for the .md file to be deleted (async trigger)
-    console.log('Waiting for corresponding .md file to be deleted...');
     
     // Poll for deletion
     let deleted = false;

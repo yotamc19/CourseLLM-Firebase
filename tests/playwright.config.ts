@@ -5,7 +5,7 @@ export default defineConfig({
   timeout: 30_000,
   expect: { timeout: 5000 },
   fullyParallel: false,
-  reporter: 'html',
+  reporter: [['./numbered-reporter.ts'], ['html', { open: 'never' }]],
   use: {
     baseURL: 'http://localhost:9002',
     headless: true,

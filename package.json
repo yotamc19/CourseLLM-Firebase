@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack -p 9002",
+    "emulators": "npm run build:functions && firebase emulators:start",
+    "build:functions": "cd functions && npm install && npm run build",
     "test:e2e": "playwright test --config=tests/playwright.config.ts",
     "test:dataconnect": "playwright test --config=tests/playwright.config.ts dataconnect.spec.ts",
     "test:storage": "playwright test --config=tests/playwright.config.ts storage.spec.ts",

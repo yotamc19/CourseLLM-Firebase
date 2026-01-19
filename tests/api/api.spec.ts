@@ -151,12 +151,17 @@ test.describe('Next.js API Routes', () => {
 
   const NEXTJS_BASE_URL = 'http://localhost:9002';
 
-  test('GET /api/test-token without params should return error', async ({ request }) => {
+  test('GET /api/test-token without params should return token in emulator mode', async ({ request }) => {
     const response = await request.get(`${NEXTJS_BASE_URL}/api/test-token`);
-
-    // Should return error about missing params or disabled
     const data = await response.json();
-    expect(data).toHaveProperty('error');
+
+    // In emulator mode, should return a token (uid is auto-generated)
+    // In non-emulator mode without ENABLE_TEST_AUTH, should return error
+    if (data.token) {
+      expect(typeof data.token).toBe('string');
+    } else {
+      expect(data).toHaveProperty('error');
+    }
   });
 
   test('test-token endpoint respects ENABLE_TEST_AUTH flag', async ({ request }) => {

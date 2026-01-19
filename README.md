@@ -72,8 +72,10 @@ This README explains how to run the CourseLLM app locally. It covers environment
 In **Terminal 1**:
 
 ```bash
-firebase emulators:start
+npm run emulators
 ```
+
+This command automatically builds the Firebase Functions before starting the emulators.
 
 - Firestore emulator: `127.0.0.1:8080`
 - Storage emulator: `127.0.0.1:9199`
